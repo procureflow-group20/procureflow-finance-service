@@ -1,0 +1,38 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AppendOnlyAuditLog",
+      "Effect": "Allow",
+      "Action": ["dynamodb:PutItem", "dynamodb:Query"],
+      "Resource": "arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/finance-audit-log"
+    },
+    {
+      "Sid": "NeverChangeOrDeleteAudit",
+      "Effect": "Deny",
+      "Action": ["dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem", "dynamodb:DeleteTable"],
+      "Resource": "arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/finance-audit-log"
+    },
+    {
+      "Sid": "PublishToProcureFlowBusOnly",
+      "Effect": "Allow",
+      "Action": "events:PutEvents",
+      "Resource": "arn:aws:events:${REGION}:${ACCOUNT}:event-bus/procureflow-events"
+    },
+    {
+      "Sid": "OwnSecretsOnly",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": [
+        "arn:aws:secretsmanager:${REGION}:${ACCOUNT}:secret:procureflow/finance/db-*",
+        "arn:aws:secretsmanager:${REGION}:${ACCOUNT}:secret:procureflow/jwt-*"
+      ]
+    },
+    {
+      "Sid": "OwnLogGroupOnly",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:${REGION}:${ACCOUNT}:log-group:/aws/lambda/finance-service:*"
+    }
+  ]
+}

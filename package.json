@@ -1,0 +1,22 @@
+{
+  "name": "procureflow-finance-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ProcureFlow Finance Approval & Budget Service (owner: Ziyad Abdalla, 225244)",
+  "main": "lambda.js",
+  "scripts": {
+    "dev": "node server.js",
+    "job:rollover": "node -e \"require('dotenv').config(); require('./src/jobs').budgetRollover().then(r => { console.log(r); process.exit(0); })\"",
+    "zip": "npm install --omit=dev --install-links && npx --yes bestzip@2.2.1 lambda.zip lambda.js src node_modules package.json && npm install --install-links",
+    "deploy": "bash infra/deploy.sh"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "procureflow-lib": "file:../procureflow-shared/lib",
+    "serverless-http": "^3.2.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}
