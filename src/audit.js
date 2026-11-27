@@ -26,7 +26,7 @@ async function record(entry) {
     await client().send(new PutCommand({ TableName: TABLE, Item: item, ConditionExpression: 'attribute_not_exists(ts)' }));
   } catch (e) {
     // the decision is already committed in Postgres; the failure is logged so it can be alarmed on
-    logger.error('AUDIT_WRITE_FAILED', { requestId: entry.requestId, action: entry.action, message: e.message });
+    logger.error('AUDIT_WRITE_FAILED', { requestId: entry.requestId, auditAction: entry.action, message: e.message });
   }
 }
 
