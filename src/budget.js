@@ -15,6 +15,17 @@ async function ensurePeriod(q, period = currentPeriod()) {
   return r.rowCount;
 }
 
+// Same, but at most once per budget period in each Lambda container: after the first call of the month
+// it costs nothing, so read endpoints no longer write to the database on every request.
+let ensuredPeriod = null;
+async function ensureCurrentPeriodOnce(q) {
+  const period = currentPeriod();
+  if (ensuredPeriod === period) return 0;
+  const opened = await ensurePeriod(q, period);
+  ensuredPeriod = period;
+  return opened;
+}
+
 async function currentBudget(q, departmentId, period = currentPeriod()) {
   const r = await q(
     `SELECT d.id AS department_id, d.name AS department_name, b.period, b.allocated, b.spent,
@@ -26,4 +37,4 @@ async function currentBudget(q, departmentId, period = currentPeriod()) {
   return r.rows[0] || null;
 }
 
-module.exports = { ensurePeriod, currentBudget, currentPeriod };
+module.exports = { ensurePeriod, ensureCurrentPeriodOnce, currentBudget, currentPeriod };

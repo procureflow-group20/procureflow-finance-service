@@ -6,8 +6,8 @@ const {
   express, createApp, ah, db, validate, validateId, verifyJwt, requireRole, publish, logger, isLambda,
   AppError, notFound, forbidden, conflict, camel, camelAll, workflow,
 } = require('procureflow-lib');
-const { ensurePeriod, currentBudget, currentPeriod } = require('./budget');
-const { reconcile, priorityRank } = require('./queue');
+const { ensureCurrentPeriodOnce, currentBudget, currentPeriod } = require('./budget');
+const { housekeeping, priorityRank } = require('./queue');
 const audit = require('./audit');
 const jobs = require('./jobs');
 
@@ -29,8 +29,7 @@ fin.use(verifyJwt());
 // F1: pending-approvals queue, sorted by final priority then waiting time.
 fin.get('/pending', requireRole('FINANCE'), ah(async (req, res) => {
   const q = validate({ department: { type: 'uuid' }, priority: { type: 'enum', values: PRIORITIES } }, req.query);
-  await ensurePeriod(db.query);
-  await reconcile();
+  await housekeeping();
   const params = [currentPeriod()];
   let where = "p.status = 'PENDING_FINANCE'";
   if (q.department) { params.push(q.department); where += ` AND p.department_id = $${params.length}`; }
@@ -55,26 +54,41 @@ fin.get('/pending', requireRole('FINANCE'), ah(async (req, res) => {
   res.json({ period: currentPeriod(), items: camelAll(r.rows) });
 }));
 
-// F1: dashboard counters and the budget of every department.
+// F1: dashboard counters and the budget of every department - one database round trip.
+// (Before the k6 fix it made 4+ round trips per call: a budget INSERT, the reconcile SELECT and four
+// queries over a pool of 2 connections, so under load it needed about twice the Lambda concurrency
+// of the other services and hit the reserved-concurrency limit of 10.)
+const DASHBOARD_SQL = `
+  WITH by_status AS (
+         SELECT status, count(*)::int AS count, coalesce(sum(total_amount_egp), 0) AS total_egp
+           FROM purchase_requests GROUP BY status),
+       pending AS (
+         SELECT department_id, sum(total_amount_egp) AS pending_amount, min(forwarded_at) AS oldest
+           FROM purchase_requests WHERE status = 'PENDING_FINANCE' GROUP BY department_id),
+       dept AS (
+         SELECT d.id AS department_id, d.name AS department_name, b.allocated, b.spent,
+                (b.allocated - b.spent) AS remaining, coalesce(pending.pending_amount, 0) AS pending_amount
+           FROM departments d
+           JOIN budgets b ON b.department_id = d.id AND b.period = $1
+           LEFT JOIN pending ON pending.department_id = d.id),
+       approved AS (
+         SELECT count(*)::int AS count, coalesce(sum(amount_egp), 0) AS total_amount
+           FROM decisions WHERE decision = 'APPROVED' AND budget_period = $1)
+  SELECT (SELECT coalesce(json_agg(by_status ORDER BY status), '[]') FROM by_status) AS by_status,
+         (SELECT min(oldest) FROM pending)                                          AS oldest_pending,
+         (SELECT coalesce(json_agg(dept ORDER BY department_name), '[]') FROM dept) AS budgets,
+         (SELECT row_to_json(approved) FROM approved)                              AS approved`;
+
 fin.get('/dashboard', requireRole('FINANCE'), ah(async (req, res) => {
   const period = currentPeriod();
-  await ensurePeriod(db.query);
-  await reconcile();
-  const [byStatus, oldest, budgets, approvedThisMonth] = await Promise.all([
-    db.query('SELECT status, count(*)::int AS count, coalesce(sum(total_amount_egp),0) AS total_egp FROM purchase_requests GROUP BY status'),
-    db.query("SELECT min(forwarded_at) AS oldest_pending FROM purchase_requests WHERE status = 'PENDING_FINANCE'"),
-    db.query(
-      `SELECT d.id AS department_id, d.name AS department_name, b.allocated, b.spent, (b.allocated - b.spent) AS remaining,
-              coalesce((SELECT sum(total_amount_egp) FROM purchase_requests p WHERE p.department_id = d.id AND p.status = 'PENDING_FINANCE'), 0) AS pending_amount
-         FROM departments d JOIN budgets b ON b.department_id = d.id AND b.period = $1 ORDER BY d.name`, [period]),
-    db.query("SELECT count(*)::int AS count, coalesce(sum(amount_egp),0) AS total_amount FROM decisions WHERE decision = 'APPROVED' AND budget_period = $1", [period]),
-  ]);
+  await housekeeping(); // usually no database work at all (see queue.js)
+  const row = (await db.query(DASHBOARD_SQL, [period])).rows[0];
   res.json({
     period,
-    byStatus: camelAll(byStatus.rows),
-    oldestPending: oldest.rows[0].oldest_pending,
-    budgets: camelAll(budgets.rows),
-    approvedThisMonth: camel(approvedThisMonth.rows[0]),
+    byStatus: camelAll(row.by_status),
+    oldestPending: row.oldest_pending,
+    budgets: camelAll(row.budgets),
+    approvedThisMonth: camel(row.approved),
   });
 }));
 
@@ -87,7 +101,7 @@ fin.get('/requests/:id', requireRole('FINANCE'), ah(async (req, res) => {
   );
   if (!r.rowCount) throw notFound('Request');
   const row = r.rows[0];
-  await ensurePeriod(db.query);
+  await ensureCurrentPeriodOnce(db.query);
   const [quotes, tl, decision, budget] = await Promise.all([
     db.query(
       `SELECT q.id, v.name AS vendor_name, q.quote_number, q.amount, q.currency, q.fx_rate, q.fx_date, q.amount_egp,
@@ -116,7 +130,7 @@ fin.post('/requests/:id/approve', requireRole('FINANCE'), ah(async (req, res) =>
     note: { type: 'string', max: 500 },
   }, req.body);
   const period = currentPeriod();
-  await ensurePeriod(db.query, period);
+  await ensureCurrentPeriodOnce(db.query);
   const result = await db.tx(async (c) => {
     const row = await lockPendingRequest(c, id);
     if (body.amountEgp > Number(row.total_amount_egp)) {
@@ -242,7 +256,7 @@ fin.post('/departments', requireRole('FINANCE'), ah(async (req, res) => {
 fin.get('/budgets', requireRole('FINANCE'), ah(async (req, res) => {
   const { period } = validate({ period: { type: 'string', pattern: /^\d{4}-(0[1-9]|1[0-2])$/, patternMessage: 'period must be YYYY-MM' } }, req.query);
   const p = period || currentPeriod();
-  if (p === currentPeriod()) await ensurePeriod(db.query, p);
+  if (p === currentPeriod()) await ensureCurrentPeriodOnce(db.query);
   const r = await db.query(
     `SELECT d.id AS department_id, d.name AS department_name, d.monthly_allocation, b.period, b.allocated, b.spent,
             (b.allocated - b.spent) AS remaining
@@ -258,7 +272,7 @@ fin.get('/budgets/:deptId/current', requireRole('FINANCE', 'MANAGER'), ah(async 
     logger.warn('DEPARTMENT_DENIED', { userId: req.user.id, departmentId: deptId, what: 'budget' });
     throw forbidden('Managers can only see their own department budget');
   }
-  await ensurePeriod(db.query);
+  await ensureCurrentPeriodOnce(db.query);
   const b = await currentBudget(db.query, deptId);
   if (!b) throw notFound('Department');
   res.json({ budget: camel(b) });
@@ -268,7 +282,7 @@ fin.put('/budgets/:deptId', requireRole('FINANCE'), ah(async (req, res) => {
   const deptId = validateId(req.params.deptId, 'department id');
   const { monthlyAllocation } = validate({ monthlyAllocation: { type: 'number', required: true, min: 0, max: MAX_EGP, decimals: 2 } }, req.body);
   const period = currentPeriod();
-  await ensurePeriod(db.query, period);
+  await ensureCurrentPeriodOnce(db.query);
   const out = await db.tx(async (c) => {
     const cur = await c.query('SELECT allocated, spent FROM budgets WHERE department_id = $1 AND period = $2 FOR UPDATE', [deptId, period]);
     if (!cur.rowCount) throw notFound('Department');
