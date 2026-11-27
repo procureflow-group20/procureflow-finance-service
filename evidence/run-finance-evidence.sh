@@ -17,6 +17,7 @@ mask() { sed -E -e 's/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/[JWT-MAS
 step() { printf '\n\033[1;36m##### %s\033[0m\n' "$*"; }
 save() { local f="$OUT/$1"; shift; { echo "\$ $*"; "$@" 2>&1; } | mask | tee "$f"; }   # save <file> <command...>
 pause_exit() { read -rp "Press Enter to close..." _; exit "${1:-0}"; }
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }   # k6.exe needs C:/... paths
 
 step "0/9 Checks"
 docker info >/dev/null 2>&1 || { echo "Docker is not running."; pause_exit 1; }
@@ -78,20 +79,26 @@ SINCE=$(( ($(date +%s) - 3600) * 1000 ))
     --query 'metricFilters[].{Name:filterName,Pattern:filterPattern,Metric:metricTransformations[0].metricName}' --output table
   save 08b-alarms.txt aws cloudwatch describe-alarms --alarm-name-prefix procureflow- \
     --query 'MetricAlarms[].[AlarmName,MetricName,Threshold,StateValue]' --output table
-  save 08c-log-budget-exceeded.txt aws logs filter-log-events --log-group-name "/aws/lambda/$FN" --start-time "$SINCE" \
-    --filter-pattern '{ $.action = "BUDGET_EXCEEDED" }' --query 'events[-5:].message' --output text
-  save 08d-log-403.txt aws logs filter-log-events --log-group-name "/aws/lambda/$FN" --start-time "$SINCE" \
-    --filter-pattern '{ $.action = "HTTP_403" }' --query 'events[-5:].message' --output text
-  save 08e-log-approved.txt aws logs filter-log-events --log-group-name "/aws/lambda/$FN" --start-time "$SINCE" \
-    --filter-pattern '{ $.action = "REQUEST_APPROVED" }' --query 'events[-5:].message' --output text
+  # Floci's filter-log-events may not support JSON patterns, so read the log group and filter locally
+  aws logs tail "/aws/lambda/$FN" --since 2h --format short > "$OUT/tmp-logs.txt" 2>&1 || true
+  for pair in "08c-log-budget-exceeded:BUDGET_EXCEEDED" "08d-log-403:HTTP_403" "08e-log-approved:REQUEST_APPROVED"; do
+    f="${pair%%:*}"; a="${pair##*:}"
+    { echo "\$ aws logs tail /aws/lambda/$FN --since 2h | grep '\"action\":\"$a\"' | tail -5"; grep "\"action\":\"$a\"" "$OUT/tmp-logs.txt" | tail -5; } | mask > "$OUT/$f.txt"
+  done
+  rm -f "$OUT/tmp-logs.txt"
+  E="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; S="$(date -u -d '-2 hours' +%Y-%m-%dT%H:%M:%SZ)"
+  for m in BudgetExceeded409 Forbidden403Finance AuditWriteFailed; do
+    save "08f-metric-$m.txt" aws cloudwatch get-metric-statistics --namespace ProcureFlow --metric-name "$m" \
+      --start-time "$S" --end-time "$E" --period 7200 --statistics Sum --output json
+  done
 } >/dev/null
-echo "saved 08a..08e"
+echo "saved 08a..08f"
 
 step "9/9 Dashboard stress test (k6) + repository secret scan"
 if command -v k6 >/dev/null 2>&1; then
   ( cd "$ROOT" && k6 run -e BASE_URL="$BASE" -e PASSWORD="$PASSWORD" -e LEVELS=5,10,15,20 -e STEP=20 \
-      --summary-export "$OUT/09a-k6-dashboard-summary.json" tests/dashboard-stress-k6.js ) 2>&1 | mask | tee "$OUT/09a-k6-dashboard.txt"
-  mask < "$OUT/09a-k6-dashboard-summary.json" > "$OUT/tmp.json" && mv "$OUT/tmp.json" "$OUT/09a-k6-dashboard-summary.json"
+      --summary-export "$(winpath "$OUT")/09a-k6-dashboard-summary.json" tests/dashboard-stress-k6.js ) 2>&1 | mask | tee "$OUT/09a-k6-dashboard.txt"
+  [ -f "$OUT/09a-k6-dashboard-summary.json" ] && mask < "$OUT/09a-k6-dashboard-summary.json" > "$OUT/tmp.json" && mv "$OUT/tmp.json" "$OUT/09a-k6-dashboard-summary.json"
 else
   echo "k6 not installed - skipped (install: winget install k6 --source winget)" | tee "$OUT/09a-k6-dashboard.txt"
 fi
