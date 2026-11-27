@@ -1,0 +1,915 @@
+{
+  "info": {
+    "name": "Finance Service - Evidence (Ziyad Abdalla 225244)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Finance Approval & Budget Service tests: 200/201, 400, 401, 403, 409. Variables: baseUrl, password."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "validUntil",
+      "value": "2027-01-26"
+    }
+  ],
+  "item": [
+    {
+      "name": "0 Setup (logins, vendor, two forwarded requests)",
+      "item": [
+        {
+          "name": "Login emp",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tok_emp', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ahmed@procureflow.test\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Login mgr",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tok_mgr', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"it.manager@procureflow.test\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Login mkmgr",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tok_mkmgr', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"marketing.manager@procureflow.test\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Login fin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tok_fin', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"finance@procureflow.test\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Manager profile (IT department id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('itDept', pm.response.json().user.departmentId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_mgr}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/me"
+          }
+        },
+        {
+          "name": "Active vendor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('vendorId', pm.response.json().vendors[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_emp}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vendors"
+          }
+        },
+        {
+          "name": "IT budget now (sets the amounts)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json().budget;",
+                  "pm.collectionVariables.set('smallAmount', 1000);",
+                  "pm.collectionVariables.set('reducedAmount', 900);",
+                  "pm.collectionVariables.set('bigAmount', Math.round(b.remaining) + 5000);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/finance/budgets/{{itDept}}/current"
+          }
+        },
+        {
+          "name": "Employee creates request A (1,000 EGP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('reqA', pm.response.json().request.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_emp}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Finance evidence A - keyboards\",\n  \"description\": \"Created by the Finance Service evidence collection\",\n  \"quantity\": 1,\n  \"suggestedPriority\": \"HIGH\",\n  \"quotes\": [{ \"vendorId\": \"{{vendorId}}\", \"quoteNumber\": \"FIN-EV-{{$timestamp}}\", \"amount\": {{smallAmount}}, \"currency\": \"EGP\", \"validUntil\": \"{{validUntil}}\", \"selected\": true }]\n}"
+            },
+            "url": "{{baseUrl}}/api/requests"
+          }
+        },
+        {
+          "name": "Employee creates request B (more than the IT budget left)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('reqB', pm.response.json().request.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_emp}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Finance evidence B - servers\",\n  \"description\": \"Created by the Finance Service evidence collection\",\n  \"quantity\": 1,\n  \"suggestedPriority\": \"HIGH\",\n  \"quotes\": [{ \"vendorId\": \"{{vendorId}}\", \"quoteNumber\": \"FIN-EV-{{$timestamp}}\", \"amount\": {{bigAmount}}, \"currency\": \"EGP\", \"validUntil\": \"{{validUntil}}\", \"selected\": true }]\n}"
+            },
+            "url": "{{baseUrl}}/api/requests"
+          }
+        },
+        {
+          "name": "Manager forwards A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_mgr}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finalPriority\": \"HIGH\",\n  \"note\": \"Approved by IT manager\"\n}"
+            },
+            "url": "{{baseUrl}}/api/manager/requests/{{reqA}}/forward"
+          }
+        },
+        {
+          "name": "Manager forwards B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_mgr}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finalPriority\": \"URGENT\",\n  \"note\": \"Needed for the data centre\"\n}"
+            },
+            "url": "{{baseUrl}}/api/manager/requests/{{reqB}}/forward"
+          }
+        }
+      ]
+    },
+    {
+      "name": "1 Finance Service checks",
+      "item": [
+        {
+          "name": "F01 No token on the pending queue -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/finance/pending"
+          }
+        },
+        {
+          "name": "F02 Employee on the pending queue -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_emp}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/finance/pending"
+          }
+        },
+        {
+          "name": "F03 Manager on the pending queue -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_mgr}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/finance/pending"
+          }
+        },
+        {
+          "name": "F04 Pending queue contains A and B (sorted by priority)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().items.map((i) => i.id);",
+                  "pm.test('A and B are in the queue', () => { pm.expect(ids).to.include(pm.collectionVariables.get('reqA')); pm.expect(ids).to.include(pm.collectionVariables.get('reqB')); });",
+                  "pm.test('B is marked over budget', () => pm.expect(pm.response.json().items.find((i) => i.id === pm.collectionVariables.get('reqB')).budgetFit).to.eql('OVER'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/finance/pending"
+          }
+        },
+        {
+          "name": "F05 Dashboard (counters + budget of every department)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('4+ departments', () => pm.expect(pm.response.json().budgets.length).to.be.at.least(4));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/finance/dashboard"
+          }
+        },
+        {
+          "name": "F06 Manager reads his own department budget -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_mgr}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/finance/budgets/{{itDept}}/current"
+          }
+        },
+        {
+          "name": "F07 Manager of Marketing reads the IT budget -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_mkmgr}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/finance/budgets/{{itDept}}/current"
+          }
+        },
+        {
+          "name": "F08 Approve more than requested -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error code AMOUNT_ABOVE_REQUESTED', () => pm.expect(pm.response.json().error.code).to.eql('AMOUNT_ABOVE_REQUESTED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountEgp\": 1000000\n}"
+            },
+            "url": "{{baseUrl}}/api/finance/requests/{{reqA}}/approve"
+          }
+        },
+        {
+          "name": "F09 Approve a reduced amount (900 of 1,000) -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('APPROVED', () => pm.expect(pm.response.json().status).to.eql('APPROVED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"amountEgp\": {{reducedAmount}}, \"note\": \"Approved without the extra cables\" }"
+            },
+            "url": "{{baseUrl}}/api/finance/requests/{{reqA}}/approve"
+          }
+        },
+        {
+          "name": "F10 Decide the same request again -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('error code WRONG_STATUS', () => pm.expect(pm.response.json().error.code).to.eql('WRONG_STATUS'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Second decision attempt\"\n}"
+            },
+            "url": "{{baseUrl}}/api/finance/requests/{{reqA}}/reject"
+          }
+        },
+        {
+          "name": "F11 Approve B above the remaining budget -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('error code BUDGET_EXCEEDED', () => pm.expect(pm.response.json().error.code).to.eql('BUDGET_EXCEEDED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"amountEgp\": {{bigAmount}} }"
+            },
+            "url": "{{baseUrl}}/api/finance/requests/{{reqB}}/approve"
+          }
+        },
+        {
+          "name": "F12 Ask employee and manager (BOTH) about B -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target\": \"BOTH\",\n  \"question\": \"Can this be split over two months?\"\n}"
+            },
+            "url": "{{baseUrl}}/api/finance/requests/{{reqB}}/request-info"
+          }
+        },
+        {
+          "name": "F13 Reject B while it waits for answers -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Too expensive this month\"\n}"
+            },
+            "url": "{{baseUrl}}/api/finance/requests/{{reqB}}/reject"
+          }
+        },
+        {
+          "name": "F14 Audit trail of A (DynamoDB, append-only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('APPROVED recorded', () => pm.expect(pm.response.json().trail.map((t) => t.action)).to.include('APPROVED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/finance/audit?requestId={{reqA}}"
+          }
+        },
+        {
+          "name": "F15 Allocation below what is already spent -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('error code BELOW_SPENT', () => pm.expect(pm.response.json().error.code).to.eql('BELOW_SPENT'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monthlyAllocation\": 0\n}"
+            },
+            "url": "{{baseUrl}}/api/finance/budgets/{{itDept}}"
+          }
+        },
+        {
+          "name": "F16 Negative allocation -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monthlyAllocation\": -5\n}"
+            },
+            "url": "{{baseUrl}}/api/finance/budgets/{{itDept}}"
+          }
+        },
+        {
+          "name": "F17 Add a vendor -> 201",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('vendorName', 'Evidence Supplies ' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"name\": \"{{vendorName}}\", \"contactEmail\": \"sales@evidence.example\" }"
+            },
+            "url": "{{baseUrl}}/api/vendors"
+          }
+        },
+        {
+          "name": "F18 Same vendor name again -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_fin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"name\": \"{{vendorName}}\" }"
+            },
+            "url": "{{baseUrl}}/api/vendors"
+          }
+        },
+        {
+          "name": "F19 Employee adds a vendor -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tok_emp}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Not allowed Ltd\"\n}"
+            },
+            "url": "{{baseUrl}}/api/vendors"
+          }
+        }
+      ]
+    }
+  ]
+}
